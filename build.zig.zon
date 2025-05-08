@@ -1,0 +1,20 @@
+.{
+    .name = .dheap,
+
+    .version = "0.0.0",
+
+    .fingerprint = 0x36fddb6d68b5eab1,
+
+    .minimum_zig_version = "0.15.0-dev.11+5c57e90ff",
+
+    .dependencies = .{
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+        "LICENSE",
+    },
+}

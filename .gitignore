@@ -2,3 +2,4 @@
 *.swo
 
 zig-out/
+.zig-cache/
