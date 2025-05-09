@@ -8,15 +8,15 @@ pub fn DHeap(
     comptime T: type,
     comptime Context: type,
     comptime compareFn: fn (context: Context, a: T, b: T) std.math.Order,
-    comptime d: usize,
 ) type {
     return struct {
         items: []T,
         capacity: usize,
         allocator: Allocator,
         context: Context,
+        branching_factor: usize,
 
-        pub fn init(allocator: Allocator, context: Context) !@This() {
+        pub fn init(allocator: Allocator, context: Context, branching_factor: usize) !@This() {
             var items = try allocator.alloc(T, init_capacity);
             items.len = 0;
             return .{
@@ -24,6 +24,7 @@ pub fn DHeap(
                 .capacity = init_capacity, 
                 .allocator = allocator,
                 .context = context,
+                .branching_factor = branching_factor,
             };
         }
 
@@ -73,7 +74,7 @@ pub fn DHeap(
                     }
                 }
                 level += 1;
-                n += std.math.powi(usize, 3, level) catch unreachable;
+                n += std.math.powi(usize, self.branching_factor, level) catch unreachable;
                 std.debug.print("\n", .{});
             }
 
@@ -86,18 +87,18 @@ pub fn DHeap(
             self.capacity = new_items.len;
         }
 
-        fn parentIndex(index: usize) usize {
+        fn parentIndex(index: usize, d: usize) usize {
             return (index - 1) / d;
         }
 
-        fn nChild(index: usize, n: usize) usize {
+        fn nChild(index: usize, n: usize, d: usize) usize {
             return d * index + n + 1;
         }
 
         fn closestChildIndex(self: @This(), index: usize) usize {
-            var cur = nChild(index, 0);
-            for (1..d) |i| {
-                const candidate = nChild(index, i);
+            var cur = nChild(index, 0, self.branching_factor);
+            for (1..self.branching_factor) |i| {
+                const candidate = nChild(index, i, self.branching_factor);
 
                 if (candidate >= self.items.len) {
                     break;
@@ -116,7 +117,7 @@ pub fn DHeap(
             var index = self.items.len - 1;
             const cur = self.items[index];
             while (index > 0) {
-                const parent_i = parentIndex(index);
+                const parent_i = parentIndex(index, self.branching_factor);
                 const parent = self.items[parent_i];
                 if (compareFn(self.context, parent, cur) == .gt) {
                     self.items[index] = parent;
@@ -132,6 +133,7 @@ pub fn DHeap(
 
         fn firstLeaf(self: @This()) i64 {
             const i: i64 = @intCast(self.items.len);
+            const d: i64 = @intCast(self.branching_factor);
             return @divFloor(i - 2, d) + 1;
 
         }
@@ -166,7 +168,7 @@ fn comp_fn(context: void, a: f64, b: f64) std.math.Order {
 
 test "test0" {
     const gpa = std.testing.allocator;
-    var heap = try DHeap(f64, void, comp_fn, 3).init(gpa, {});
+    var heap = try DHeap(f64, void, comp_fn).init(gpa, {}, 4);
     defer heap.deinit();
 
     _ = try heap.insert(2.0);
@@ -185,9 +187,7 @@ test "test0" {
     _ = try heap.insert(7.0);
     _ = try heap.insert(6.0);
 
-    heap.prettyPrint();
-
-    std.debug.print("\n--------------\n", .{});
+    // heap.prettyPrint();
 
     try std.testing.expectEqual(2.0, heap.pop());
     try std.testing.expectEqual(3.0, heap.pop());
@@ -205,10 +205,4 @@ test "test0" {
     try std.testing.expectEqual(12.0, heap.pop());
     try std.testing.expectEqual(14.0, heap.pop());
     try std.testing.expectEqual(heap.items.len, 0);
-
-
-//    for (heap.items) |el| {
-//        std.debug.print("{d:.2}    ", .{el});
-//    }
-    try std.testing.expect(true);
 }
