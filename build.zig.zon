@@ -1,7 +1,7 @@
 .{
     .name = .dheap,
 
-    .version = "0.0.0",
+    .version = "0.1.0",
 
     .fingerprint = 0x36fddb6d68b5eab1,
 
