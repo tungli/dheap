@@ -1,5 +1,8 @@
 //! Heap with compile-time parameteric branching factor, also known as d-ary
-//! heap. There is already a binary heap in the standard library:
+//! heap. 
+//!
+//! Note that there is a binary heap in the standard library if you do not want
+//! to use this module:
 //! [`std.PriorityQueue`](https://ziglang.org/documentation/master/std/#std.priority_queue)
 //!
 //! Performance notes:
@@ -10,7 +13,7 @@
 //!   factor is usually around 4.
 //! - The branching factor here is compile time to enable the optimization of
 //!   division by the compiler, see e.g:
-//!   https://en.wikipedia.org/wiki/Montgomery_modular_multiplication.
+//!   [Montgomery modular multiplication](https://en.wikipedia.org/wiki/Montgomery_modular_multiplication).
 //! - If case you need to pop the top element and insert a new one, or vice
 //!   versa, use the `replaceTop` member function to avoid paying the extra
 //!   cost of "bubbling-up" the inserted element.
