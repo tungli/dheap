@@ -5,7 +5,9 @@
 //! Performance notes:
 //! - Heaps with higher branching factors are faster in inserting element and
 //!   slower in removing elements. If you are going to insert and then remove all
-//!   elements your best bet is probably the standard binary heap.
+//!   elements a binary heap is already quite fast and a branching factor
+//!   higher than 5 is probably going to be less optimal. The optimal branching
+//!   factor is usually around 4.
 //! - The branching factor here is compile time to enable the optimization of
 //!   division by the compiler, see e.g:
 //!   https://en.wikipedia.org/wiki/Montgomery_modular_multiplication.
@@ -13,31 +15,30 @@
 //!   versa, use the `replaceTop` member function to avoid paying the extra
 //!   cost of "bubbling-up" the inserted element.
 //!
-//!
 //! A simple benchmark for a rough idea: inserting 1e4 random `u64` elements into the heap:
 //! ```
-//! benchmark               time/run (avg ± σ)
-//! ---------------------------------------------
-//! [std]  only insert      229.52us ± 25.333us
-//! [d=2]  only insert      222.877us ± 30.763us
-//! [d=3]  only insert      194.461us ± 30.666us
-//! [d=4]  only insert      166.156us ± 31.51us
-//! [d=6]  only insert      146.055us ± 36.724us
-//! [d=9]  only insert      132.419us ± 38.514us
-//! [d=12] only insert      127.653us ± 39.015us
-//! [d=18] only insert      121.178us ± 37.48us
-//! [d=25] only insert      121.308us ± 38.305us
-//! ---------------------------------------------
-//! [std]  insert & pop     1.076ms ± 39.306us
-//! [d=2]  insert & pop     897.273us ± 33.109us
-//! [d=3]  insert & pop     918.428us ± 36.975us
-//! [d=4]  insert & pop     983.259us ± 36.41us
-//! [d=6]  insert & pop     1.112ms ± 36.679us
-//! [d=9]  insert & pop     1.133ms ± 35.575us
-//! [d=12] insert & pop     1.196ms ± 37.794us
-//! [d=18] insert & pop     1.286ms ± 43.494us
-//! [d=25] insert & pop     1.363ms ± 42.428us
+//! benchmark                    time/run (avg ± σ)
+//! -------------------------------------------------
+//! [std]  only insert           243.539us ± 29.004us
+//! [d=2]  only insert           227.793us ± 32.214us
+//! [d=3]  only insert           193.544us ± 31.476us
+//! [d=4]  only insert           164.575us ± 33.934us
+//! [d=6]  only insert           147.85us ± 32.493us
+//! [d=9]  only insert           129.839us ± 23.473us
+//! [d=12] only insert           128.567us ± 38.791us
+//! [d=18] only insert           122.77us ± 42.012us
+//! [d=25] only insert           120.442us ± 29.357us
+//! [std]  insert & pop          1.077ms ± 33.59us
+//! [d=2]  insert & pop          553.248us ± 27.777us
+//! [d=3]  insert & pop          566.435us ± 28.033us
+//! [d=4]  insert & pop          545.761us ± 22.576us
+//! [d=6]  insert & pop          644.93us ± 37.126us
+//! [d=9]  insert & pop          729.345us ± 49.433us
+//! [d=12] insert & pop          941.802us ± 33.717us
+//! [d=18] insert & pop          1.088ms ± 48.944us
+//! [d=25] insert & pop          1.422ms ± 149.116us
 //! ```
+//! where `d` is the branching factor and `std` stands for the `std.PriorityQueue` (binary heap).
 
 const std = @import("std");
 const assert = std.debug.assert;
@@ -79,7 +80,7 @@ pub fn DHeap(
 
         /// Insert an element increasing capacity as needed.
         /// Complexity: `O(log(self.items.len))`.
-        pub fn insert(self: *@This(), elem: T) !usize {
+        pub fn insert(self: *@This(), elem: T) !void {
             if (self.capacity == self.items.len) {
                 try self.increaseCapacity((self.capacity + 1) * 2);
             }
@@ -96,21 +97,12 @@ pub fn DHeap(
             assert(self.items.len != 0);
 
             const top = self.items[0];
-
             const last = self.items.len - 1;
             self.items[0] = self.items[last];
             self.items.len = last;
-            _ = self.pushDown(0);
+            self.pushDown(0);
 
             return top;
-        }
-
-        /// Bubbles up `elem` into the heap.
-        /// Does not modify the length of the heap nor checks its capacity!
-        /// Complexity: `O(self.items.len)`.
-        pub fn insertUnchecked(self: *@This(), elem: T) !usize {
-            self.items[self.items.len - 1] = elem;
-            return bubbleUp(self.*);
         }
 
         pub fn insertSlice(self: *@This(), slice: []T) !void {
@@ -149,10 +141,10 @@ pub fn DHeap(
 
             var i = (l - 1) / branching_factor;
             while (i > 0) {
-                _ = heap.pushDown(i);
+                heap.pushDown(i);
                 i -= 1;
             }
-            _ = heap.pushDown(0);
+            heap.pushDown(0);
 
             return heap;
         }
@@ -164,38 +156,82 @@ pub fn DHeap(
 
             const old_elem = self.items[0];
             self.items[0] = new_elem;
-            _ = self.pushDown(0);
+            self.pushDown(0);
 
             return old_elem;
         }
 
-        fn increaseCapacity(self: *@This(), new_capacity: usize) !void {
+        pub fn increaseCapacity(self: *@This(), new_capacity: usize) !void {
             const new_items = try self.allocator.realloc(self.items, new_capacity);
             self.items.ptr = new_items.ptr;
             self.capacity = new_items.len;
         }
 
-        fn lowestDistChild(self: @This(), index: usize) usize {
-            const child_0 = branching_factor * index + 1;
-            var cur = child_0;
-            inline for (1..branching_factor) |i| {
-                const candidate = child_0 + i;
+        fn findLowestChildLimited(self: @This(), first_child: usize) usize {
+            const n_children = self.items.len - first_child;
+            var candidate_i = first_child;
+            var cur = candidate_i;
+            for (1..n_children) |_| {
+                candidate_i += 1;
 
-                if (candidate >= self.items.len) {
-                    break;
-                }
-
-                const order = compareFn(self.context, self.items[cur], self.items[candidate]);
-                if (order == .gt) {
-                    cur = candidate;
+                const order = compareFn(self.context, self.items[candidate_i], self.items[cur]);
+                if (order == .lt) {
+                    cur = candidate_i;
                 }
             }
             return cur;
         }
 
-        fn bubbleUp(self: @This()) usize {
+        // assumes all children exist
+        fn findLowestChildUnchecked(self: @This(), last_child: usize) usize {
+            var candidate_i = last_child;
+            var cur = candidate_i;
+            inline for (1..branching_factor) |_| {
+                candidate_i -= 1;
+
+                const order = compareFn(self.context, self.items[candidate_i], self.items[cur]);
+                if (order == .lt) {
+                    cur = candidate_i;
+                }
+            }
+            return cur;
+        }
+
+        fn pushDown(self: @This(), start: usize) void {
+            if (self.items.len == 0) return;
+
+            var index = start;
+            const cur = self.items[index];
+            while (true) {
+                const last_child_i = branching_factor * (index + 1);
+                var child_i: usize = undefined;
+                if (last_child_i >= self.items.len) {
+                    const first_child_i = last_child_i - branching_factor + 1;
+
+                    if (first_child_i >= self.items.len) {
+                        break;
+                    }
+
+                    child_i = self.findLowestChildLimited(first_child_i);
+                } else {
+                    child_i = self.findLowestChildUnchecked(last_child_i);
+                }
+
+                const child = self.items[child_i];
+                if (compareFn(self.context, child, cur) == .lt) {
+                    self.items[index] = child;
+                    index = child_i;
+                } else {
+                    break;
+                }
+            }
+            self.items[index] = cur;
+        }
+
+        fn bubbleUp(self: @This()) void {
             var index = self.items.len - 1;
             const cur = self.items[index];
+
             while (index > 0) {
                 const parent_i = (index - 1) / branching_factor;
                 const parent = self.items[parent_i];
@@ -206,32 +242,16 @@ pub fn DHeap(
                 index = parent_i;
             }
             self.items[index] = cur;
-            return index;
         }
 
-        fn pushDown(self: @This(), start: usize) usize {
-            if (self.items.len == 0) return 0;
-
-            var index = start;
-            const cur = self.items[index];
-            while (true) {
-                const child_i = self.lowestDistChild(index);
-                if (child_i >= self.items.len) {
-                    break;
-                }
-                const child = self.items[child_i];
-                if (compareFn(self.context, child, cur) == .lt) {
-                    self.items[index] = child;
-                    index = child_i;
-                } else {
-                    break;
-                }
-            }
-            self.items[index] = cur;
-            return index;
+        fn insertUnchecked(self: *@This(), elem: T) !void {
+            self.items[self.items.len - 1] = elem;
+            bubbleUp(self.*);
         }
     };
 }
+
+// ------ TESTS ------- //
 
 fn comp_fn_f64(context: void, a: f64, b: f64) std.math.Order {
     _ = context;
