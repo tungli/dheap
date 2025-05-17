@@ -66,6 +66,20 @@ pub fn DHeap(
         allocator: Allocator,
         context: Context,
 
+        pub fn isValid(self: @This()) bool {
+            for (0..self.items.len) |i| {
+                for (0..branching_factor) |nth_child| {
+                    const child_i = branching_factor * i + 1 + nth_child;
+                    if (child_i < self.items.len) {
+                        if(!(compareFn(self.context, self.items[i], self.items[child_i]) != .gt)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
         pub fn init(allocator: Allocator, context: Context, init_capacity: usize) !@This() {
             var items = try allocator.alloc(T, init_capacity);
             items.len = 0;
@@ -100,9 +114,7 @@ pub fn DHeap(
             assert(self.items.len != 0);
 
             const top = self.items[0];
-            const last = self.items.len - 1;
-            self.items[0] = self.items[last];
-            self.items.len = last;
+            self.items[0] = self.removeLast();
             self.pushDown(0);
 
             return top;
@@ -170,6 +182,56 @@ pub fn DHeap(
             self.capacity = new_items.len;
         }
 
+        /// Complexity: `O(log(self.items.len))`
+        pub fn update(self: *@This(), index: usize, new_val: T) void {
+            const old_val = self.items[index];
+            self.items[index] = new_val;
+
+            switch (compareFn(self.context, new_val, old_val)) {
+                .lt => self.bubbleUp(index),
+                .gt => self.pushDown(index),
+                .eq => {},
+            }
+        }
+
+        /// Remove and return `self.items[self.items.len - 1]`
+        /// Complexity: constant
+        pub fn removeLast(self: *@This()) T {
+            const last_i = self.items.len - 1;
+            const elem = self.items[last_i];
+            self.items.len = last_i;
+            return elem;
+        }
+
+        /// Return an element at located at `self.items[index]` removing it from the heap.
+        /// Complexity: `O(log(self.items.len))`.
+        pub fn remove(self: *@This(), index: usize) T {
+            if (index == 0) return self.pop();
+
+            assert(self.items.len > index);
+
+            // the last element special case (note: self.items.len is different after `plugHole`)
+            if (index == self.items.len - 1) {
+                return self.removeLast();
+            } 
+
+            const elem = self.items[index];
+            self.items[index] = self.removeLast();
+
+            // the new element might violate heap invariant in both ways
+            const parent_i = (index - 1) / branching_factor;
+            if (compareFn(self.context, self.items[parent_i], self.items[index]) == .gt) {
+                self.bubbleUp(index);
+            } else {
+                // if elem has no children, return elem without pushDown
+                if (branching_factor * index < self.items.len) {
+                    self.pushDown(index);
+                }
+            }
+
+            return elem;
+        }
+
         fn findLowestChildLimited(self: @This(), first_child: usize) usize {
             const n_children = self.items.len - first_child;
             var candidate_i = first_child;
@@ -231,10 +293,9 @@ pub fn DHeap(
             self.items[index] = cur;
         }
 
-        fn bubbleUp(self: @This()) void {
-            var index = self.items.len - 1;
+        fn bubbleUp(self: @This(), start: usize) void {
+            var index = start;
             const cur = self.items[index];
-
             while (index > 0) {
                 const parent_i = (index - 1) / branching_factor;
                 const parent = self.items[parent_i];
@@ -248,8 +309,9 @@ pub fn DHeap(
         }
 
         fn insertUnchecked(self: *@This(), elem: T) !void {
-            self.items[self.items.len - 1] = elem;
-            bubbleUp(self.*);
+            const l = self.items.len - 1;
+            self.items[l] = elem;
+            bubbleUp(self.*, l);
         }
     };
 }
@@ -272,69 +334,122 @@ test "insert first, pop all, with shrinkToFit" {
     defer heap.deinit();
 
     _ = try heap.insert(2.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(4.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(3.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(7.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(5.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(4.0);
     try heap.shrinkToFit();
     try heap.shrinkToFit();
     _ = try heap.insert(8.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(6.0);
     _ = try heap.insert(10.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(12.0);
     _ = try heap.insert(11.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(10.0);
     _ = try heap.insert(14.0);
+    try std.testing.expect(heap.isValid());
     _ = try heap.insert(7.0);
     _ = try heap.insert(6.0);
+    try std.testing.expect(heap.isValid());
 
     try std.testing.expectEqual(2.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(3.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(4.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(4.0, heap.pop());
     try std.testing.expectEqual(5.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(6.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(6.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(7.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try heap.shrinkToFit();
     try std.testing.expectEqual(7.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(8.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(10.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(10.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(11.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try heap.shrinkToFit();
     try std.testing.expectEqual(12.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(14.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(heap.items.len, 0);
 }
 
-test "rng insert or pop" {
-    var rng = std.Random.DefaultPrng.init(1205910);
+test "rng insert|pop|update|remove" {
+    const seed = 205910;
+    var rng = std.Random.DefaultPrng.init(seed);
     const gpa = std.testing.allocator;
+    const at_most: u64 = 3e3;
 
-    var heap = try DHeap(u64, void, comp_fn_u64, 7).init(gpa, {}, 0);
+    var heap = try DHeap(u64, void, comp_fn_u64, 4).init(gpa, {}, 0);
     defer heap.deinit();
 
     var ref = std.PriorityQueue(u64, void, comp_fn_u64).init(gpa, {});
     defer ref.deinit();
 
-    const n: usize = 1e5;
+    const n: usize = 1e4;
 
     for (0..(n / 10)) |_| {
-        const val = rng.random().uintAtMost(u64, 3e3);
-        _ = try heap.insert(val);
+        const val = rng.random().uintAtMost(u64, at_most);
+        try heap.insert(val);
         try ref.add(val);
     }
 
     for (0..n) |_| {
         const do_pop: bool = rng.next() % 3 == 0;
+        const do_update: bool = rng.next() % 5 == 0;
+        const do_remove: bool = rng.next() % 6 == 0;
         if (do_pop) {
             try std.testing.expectEqual(ref.remove(), heap.pop());
             if (heap.items.len == 0) break;
+        }
+        else if(do_update) {
+            const val = rng.random().uintAtMost(u64, at_most);
+            var index = rng.random().uintAtMost(usize, heap.items.len - 1);
+            // find first occurence
+            for (0..heap.items.len) |i| { 
+                if (heap.items[index] == heap.items[i])
+                {
+                    index = i;
+                    break;
+                }
+            }
+            try ref.update(heap.items[index], val);
+            heap.update(index, val);
+        } else if(do_remove) {
+            const index = rng.random().uintAtMost(usize, heap.items.len - 1);
+            var ref_index: usize = undefined;
+            for (0..ref.items.len) |i| {
+                if (ref.items[i] == heap.items[index]) {
+                    ref_index = i;
+                    break;
+                }
+            }
+            try std.testing.expectEqual(ref.removeIndex(ref_index), heap.remove(index));
+            if (heap.items.len == 0) break;
         } else {
-            const val = rng.next();
-            _ = try heap.insert(val);
+            const val = rng.random().uintAtMost(u64, at_most);
+            try heap.insert(val);
             try ref.add(val);
         }
     }
@@ -375,20 +490,25 @@ test "replaceTop" {
     var heap = try DHeap(f64, void, comp_fn_f64, 3).init(gpa, {}, 1);
     defer heap.deinit();
 
-    _ = try heap.insert(2.0);
-    _ = try heap.insert(4.0);
-    _ = try heap.insert(3.0);
-    _ = try heap.insert(7.0);
-    _ = try heap.insert(3.0);
-    _ = try heap.insert(4.0);
-    _ = try heap.insert(8.0);
+    try heap.insert(2.0);
+    try heap.insert(4.0);
+    try heap.insert(3.0);
+    try heap.insert(7.0);
+    try heap.insert(3.0);
+    try heap.insert(4.0);
+    try heap.insert(8.0);
+    try std.testing.expect(heap.isValid());
 
     try std.testing.expectEqual(2.0, heap.replaceTop(0.0));
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(0.0, heap.pop());
     try std.testing.expectEqual(3.0, heap.pop());
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(3.0, heap.replaceTop(12.0));
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(4.0, heap.pop());
     try std.testing.expectEqual(4.0, heap.replaceTop(11.0));
+    try std.testing.expect(heap.isValid());
     try std.testing.expectEqual(7.0, heap.pop());
     try std.testing.expectEqual(8.0, heap.pop());
     try std.testing.expectEqual(11.0, heap.pop());
