@@ -43,10 +43,11 @@ pub fn DHeap(
                 for (0..branching_factor) |nth_child| {
                     const child_i = branching_factor * i + 1 + nth_child;
                     if (child_i < self.items.len) {
-                        if (!(compareFn(self.context, self.items[i], self.items[child_i]) != .gt)) {
+                        if (compareFn(self.context, self.items[i], self.items[child_i]) == .gt) {
                             return false;
                         }
                     }
+                    else return true;
                 }
             }
             return true;
@@ -215,23 +216,23 @@ pub fn DHeap(
                 if (child_0 >= self.items.len) {
                     break;
                 }
-                var child_i: usize = child_0;
-                inline for (1..branching_factor) |i| {
+                var lowest_child_i: usize = child_0;
+                for (1..branching_factor) |i| {
                     const candidate = child_0 + i;
 
                     if (candidate < self.items.len) {
-                        const order = compareFn(self.context, self.items[child_i], self.items[candidate]);
+                        const order = compareFn(self.context, self.items[lowest_child_i], self.items[candidate]);
                         if (order == .gt) {
-                            child_i = candidate;
+                            lowest_child_i = candidate;
                         }
                     }
                 }
 
                 // swap if lower
-                const child = self.items[child_i];
+                const child = self.items[lowest_child_i];
                 if (compareFn(self.context, child, cur) == .lt) {
                     self.items[index] = child;
-                    index = child_i;
+                    index = lowest_child_i;
                 } else {
                     break;
                 }
@@ -246,7 +247,7 @@ pub fn DHeap(
                 const parent_i = (index - 1) / branching_factor;
                 const parent = self.items[parent_i];
 
-                if (compareFn(self.context, parent, cur) != .gt) break;
+                if (compareFn(self.context, cur, parent) == .gt) break;
 
                 self.items[index] = parent;
                 index = parent_i;
