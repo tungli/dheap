@@ -1,5 +1,5 @@
 //! A heap (priority queue) with compile-time parameteric branching factor, also
-//! known as d-ary heap. 
+//! known as d-ary heap.
 //!
 //! Note that there is a binary heap in the standard library if you do not want
 //! to use this module:
@@ -43,7 +43,7 @@ pub fn DHeap(
                 for (0..branching_factor) |nth_child| {
                     const child_i = branching_factor * i + 1 + nth_child;
                     if (child_i < self.items.len) {
-                        if(!(compareFn(self.context, self.items[i], self.items[child_i]) != .gt)) {
+                        if (!(compareFn(self.context, self.items[i], self.items[child_i]) != .gt)) {
                             return false;
                         }
                     }
@@ -185,7 +185,7 @@ pub fn DHeap(
             // the last element special case (note: self.items.len is different after `plugHole`)
             if (index == self.items.len - 1) {
                 return self.removeLast();
-            } 
+            }
 
             const elem = self.items[index];
             self.items[index] = self.removeLast();
@@ -202,24 +202,6 @@ pub fn DHeap(
             }
 
             return elem;
-        }
-
-        fn lowestDistChild(self: @This(), index: usize) usize {
-            const child_0 = branching_factor * index + 1;
-            var cur = child_0;
-            inline for (1..branching_factor) |i| {
-                const candidate = child_0 + i;
-
-                if (candidate >= self.items.len) {
-                    break;
-                }
-
-                const order = compareFn(self.context, self.items[cur], self.items[candidate]);
-                if (order == .gt) {
-                    cur = candidate;
-                }
-            }
-            return cur;
         }
 
         fn pushDown(self: @This(), start: usize) void {
@@ -386,21 +368,19 @@ test "rng insert|pop|update|remove" {
         if (do_pop) {
             try std.testing.expectEqual(ref.remove(), heap.pop());
             if (heap.items.len == 0) break;
-        }
-        else if(do_update) {
+        } else if (do_update) {
             const val = rng.random().uintAtMost(u64, at_most);
             var index = rng.random().uintAtMost(usize, heap.items.len - 1);
             // find first occurence
-            for (0..heap.items.len) |i| { 
-                if (heap.items[index] == heap.items[i])
-                {
+            for (0..heap.items.len) |i| {
+                if (heap.items[index] == heap.items[i]) {
                     index = i;
                     break;
                 }
             }
             try ref.update(heap.items[index], val);
             heap.update(index, val);
-        } else if(do_remove) {
+        } else if (do_remove) {
             const index = rng.random().uintAtMost(usize, heap.items.len - 1);
             var ref_index: usize = undefined;
             for (0..ref.items.len) |i| {
