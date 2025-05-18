@@ -232,31 +232,19 @@ pub fn DHeap(
             return elem;
         }
 
-        fn findLowestChildLimited(self: @This(), first_child: usize) usize {
-            const n_children = self.items.len - first_child;
-            var candidate_i = first_child;
-            var cur = candidate_i;
-            for (1..n_children) |_| {
-                candidate_i += 1;
+        fn lowestDistChild(self: @This(), index: usize) usize {
+            const child_0 = branching_factor * index + 1;
+            var cur = child_0;
+            inline for (1..branching_factor) |i| {
+                const candidate = child_0 + i;
 
-                const order = compareFn(self.context, self.items[candidate_i], self.items[cur]);
-                if (order == .lt) {
-                    cur = candidate_i;
+                if (candidate >= self.items.len) {
+                    break;
                 }
-            }
-            return cur;
-        }
 
-        // assumes all children exist
-        fn findLowestChildUnchecked(self: @This(), last_child: usize) usize {
-            var candidate_i = last_child;
-            var cur = candidate_i;
-            inline for (1..branching_factor) |_| {
-                candidate_i -= 1;
-
-                const order = compareFn(self.context, self.items[candidate_i], self.items[cur]);
-                if (order == .lt) {
-                    cur = candidate_i;
+                const order = compareFn(self.context, self.items[cur], self.items[candidate]);
+                if (order == .gt) {
+                    cur = candidate;
                 }
             }
             return cur;
@@ -268,20 +256,24 @@ pub fn DHeap(
             var index = start;
             const cur = self.items[index];
             while (true) {
-                const last_child_i = branching_factor * (index + 1);
-                var child_i: usize = undefined;
-                if (last_child_i >= self.items.len) {
-                    const first_child_i = last_child_i - branching_factor + 1;
+                // find lowest child
+                const child_0 = branching_factor * index + 1;
+                if (child_0 >= self.items.len) {
+                    break;
+                }
+                var child_i: usize = child_0;
+                inline for (1..branching_factor) |i| {
+                    const candidate = child_0 + i;
 
-                    if (first_child_i >= self.items.len) {
-                        break;
+                    if (candidate < self.items.len) {
+                        const order = compareFn(self.context, self.items[child_i], self.items[candidate]);
+                        if (order == .gt) {
+                            child_i = candidate;
+                        }
                     }
-
-                    child_i = self.findLowestChildLimited(first_child_i);
-                } else {
-                    child_i = self.findLowestChildUnchecked(last_child_i);
                 }
 
+                // swap if lower
                 const child = self.items[child_i];
                 if (compareFn(self.context, child, cur) == .lt) {
                     self.items[index] = child;
